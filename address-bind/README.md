@@ -31,7 +31,7 @@ test in playground https://live.ckbccc.com/
 
 generate bind info:
 1. generate bind info message.
-2. serialize message and convert to hex string(no prefix `0x`).
+2. serialize message and convert to hex string(with prefix `0x`).
 3. print this hex string.
 
 bind address:
