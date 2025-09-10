@@ -4,7 +4,7 @@ bind address in a offline wallet(for example Neuron) to address in web wallet.
 
 ## steps
 
-1. generate bind info message.
+1. generate bind info message. timestamp is unix timestamp in ms. from script must be Scep256k1/Blake160.
     ```
     table BindInfo {
         from: Script,
@@ -12,7 +12,7 @@ bind address in a offline wallet(for example Neuron) to address in web wallet.
         timestamp: Uint64,
     }
     ```
-2. serialize message and convert to hex string(no prefix `0x`).
+2. serialize message and convert to hex string(with prefix `0x`).
 3. sign hex string with Neuron.
 4. compose message with signature.
     ```
@@ -22,12 +22,10 @@ bind address in a offline wallet(for example Neuron) to address in web wallet.
     }
     ```
 5. use web wallet transfer some ckb to itself. put BindInfoWithSig in witness.
-6. backend scan ckb tx, verify signature. if valid, record bind relationship in database. for same from address, bind info with later timestamp will update bind relationship. if not valid, throw error.
+6. backend scan ckb tx, verify signature. if valid, record bind relationship in database. for same from address, bind info with later timestamp will update bind relationship.
 7. frontend query bind relationship from backend. if bind relationship exists, show bind info. if not, show bind form.
 
 ## frontend
-
-test in playground https://live.ckbccc.com/
 
 generate bind info:
 1. generate bind info message.
@@ -46,7 +44,7 @@ bind address:
 scanner:
 1. scan ckb tx. filter bind address tx.
 2. for each bind address tx, verify signature in BindInfoWithSig.
-3. if valid, record bind relationship in database. for same from address, bind info with later timestamp will update bind relationship. if not valid, throw error.
+3. if valid, record bind relationship in database. for same from address, bind info with later timestamp will update bind relationship.
 
 api:
 1. query bind relationship by from address.

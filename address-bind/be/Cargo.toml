@@ -1,0 +1,15 @@
+[package]
+name = "address-bind-be"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+ckb-hash = "0.202"
+ckb-jsonrpc-types = "0.202"
+ckb-sdk = "4.2"
+ckb-types = "0.202"
+clap = { version = "4.5", features = ["derive"] }
+molecule = { version = "0.8", default-features = false }
+tokio = { version = "1", features = ["full"] }
+hex = "0.4"
+secp256k1 = { version = "0.30", features = ["recovery"] }
