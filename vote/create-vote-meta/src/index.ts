@@ -22,11 +22,12 @@ async function main() {
         "0x1380b63765aacc617854fd83434a90caa535ba7117fbf3d9d01ba7f1d472b561",
         "0xe20182d70b2c498483d626f9f558050a8e0df731bbafdfa277e34e3a0a745036",
         "0x7c9b0e612253e09f74501e84982cedbf099ee836f158de22d4a294c9e43a294b",
-        "0xeb5b414a4db5f571990ad0912d14b0711f88720ea9b1ca67d59f09a44b879071"
+        "0xeb5b414a4db5f571990ad0912d14b0711f88720ea9b1ca67d59f09a44b879071",
+        "0xabbfbf9155679b5d1399b4aa04dac6f3f71e63fd3ae4759110a415169eefeeed"
   ]
 
   // get from smt component
-  const smtRootHash = "0xef9527567ea823cc631ee635813169bedc72a26e9e19af0c3e889400ff8b7b97"
+  const smtRootHash = "0x7e602b84ea55d05337c674f99c279b674a454c7186f0b8fc308291783dd59245"
 
   // since format
   // from epoch 100 to 142
@@ -71,17 +72,17 @@ async function main() {
     ],
     outputsData: [voteMetaHex],
   })
-  await tx.completeInputsAtLeastOne(signer);
+  await tx.completeInputsByCapacity(signer);
   await tx.completeFeeBy(signer);
 
-  await signer.signTransaction(tx);
+  // await signer.signTransaction(tx);
 
   console.log("tx: ", ccc.stringify(tx));
-  console.log("tx hash: ", tx.hash());
+  // console.log("tx hash: ", tx.hash());
 
   // just for test no need send tx
-  //const txHash = await signer.sendTransaction(tx);
-  //console.log("The transaction hash is", txHash);
+  const txHash = await signer.sendTransaction(tx);
+  console.log("The transaction hash is", txHash);
 }
 
 main().then(() => process.exit());

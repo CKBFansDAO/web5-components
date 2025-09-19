@@ -1,5 +1,5 @@
 import { exit } from "process";
-import { VoteProof } from "./molecules";
+import { VoteProof, VoteMeta } from "./molecules";
 import { ccc, Transaction, WitnessArgs, OutPoint} from "@ckb-ccc/core";
 
 async function main() {
@@ -14,13 +14,16 @@ async function main() {
   // vote "good"
   const candidates = ["no", "not bad", "good", "awesome"]
   const voteIndex = candidates.indexOf("good");
-  const voteNum = 1 << (voteIndex + 1); 
+  const voteNum = 1 << voteIndex; 
   // voteData is 32 bit little endian
-  const voteData = voteNum.toString(16).padStart(8, "0");
+  const voteData = voteNum.toString(16).padStart(8, "0")
+    .match(/.{2}/g)!
+    .reverse()
+    .join("");
   console.log("vote data: ", ccc.hexFrom(voteData));
 
   // user smt proof from smt
-  const userSmtProof = "0x4c4ffc51fc460c9bae4a5afce6de58192cc0a7416b9a62627878627013d983c76ef3b3485d1380b63765aacc617854fd83434a90caa535ba7117fbf3d9d01ba7f1d472b50151fdf5df9651f803196883b8904d1cd5d38ccac9e658071f7882d45888b3bfb0cf357c9b0e612253e09f74501e84982cedbf099ee836f158de22d4a294c9e43a290b51fe504a34e98c2c3101dac192d1046c6d7d1a365de76159803ede966affdae1c160e20182d70b2c498483d626f9f558050a8e0df731bbafdfa277e34e3a0a7450364f01";
+  const userSmtProof = "0x4c4fff50378f5d8873eed84dbfd327bd9b258f2e0a262364b6fd5cb0550e799dba067da4";
   // build vote proof
   const voteProof = new VoteProof(
     voteAddr.script.hash(),
@@ -32,7 +35,7 @@ async function main() {
 
   // cell deps of vote meta
   const voteMetaOutpoint = {
-    txHash: "0x4cea81eaaf5ae7086f73d0b42d2295aa9103057c880a5b9f54849422aafb5297",
+    txHash: "0xe3d16e23410919a671de30ca56902cd44a13c6e0ba56538e09df436e32b9fe00",
     index: 0,
   }
   const voteMetaCellDep = {
@@ -40,13 +43,34 @@ async function main() {
     depType: "code",
   }
 
+
+  // get cell data to show vote meta
+  const voteMetaCell = await cccClient.getCell(voteMetaOutpoint);
+  if (!voteMetaCell) {
+    console.log("vote meta cell not found");
+    exit(1);
+  }
+  const voteMeta = VoteMeta.fromBytes(voteMetaCell.outputData)
+  console.log("vote meta: ", voteMeta);
+
+
   // typescript of vote contract
-  // TODO: replace with real vote contract type script and add cell dep of vote contract later
+  // from https://github.com/XuJiandong/ckb-dao-vote/blob/main/docs/ckb-dao-vote.md
   // args is blake160 hash of vote meta cell out point
+  // cell deps of vote meta
+  const voteContractOutpoint = {
+    txHash: "0x024ec56c1d2ad4940a96edfd5cfd736bdb0c7d7342da9e74d3033872bdb9cbc1",
+    index: 0,
+  }
+  const voteContractCellDep = {
+    outPoint: voteContractOutpoint,
+    depType: "code",
+  }
+
   const voteTypeArgs = OutPoint.from(voteMetaOutpoint).hash().slice(0, 42);
   console.log("vote type args: ", voteTypeArgs);
   const voteTypeScript = {
-    codeHash: "0x00000000000000000000000000000000000000000000000000545950455f4944",
+    codeHash: "0xb140de2d7d1536cfdcb82da7520475edce5785dff90edae9073c1143d88f50c5",
     args: voteTypeArgs,
     hashType: "type",
   }
@@ -54,6 +78,7 @@ async function main() {
   // create a vote cell
   const tx = Transaction.from({
     cellDeps: [
+      voteContractCellDep,
       voteMetaCellDep,
     ],
     outputs: [
@@ -65,50 +90,25 @@ async function main() {
     outputsData: [voteData],
   })
 
-  await tx.completeInputsAtLeastOne(signer);
-  await tx.completeFeeBy(signer);
-
-  // set vote proof into witness
+    // set vote proof into witness
   let witnessArgs = WitnessArgs.from({
     outputType: voteProofBytes,
   });
-  tx.setWitnessArgsAt(0, witnessArgs);
 
-  await signer.signTransaction(tx);
+  await tx.completeInputsByCapacity(signer);
+  await tx.completeFeeBy(signer);
 
-  console.log("tx: ", ccc.stringify(tx));
-  console.log("tx hash: ", tx.hash());
+  const witness = WitnessArgs.fromBytes(tx.witnesses[0]);
+  
+  witness.outputType = ccc.hexFrom(voteProofBytes);
+  tx.witnesses[0] = ccc.hexFrom(witness.toBytes());
 
-  // just for test no need send tx
-  //const txHash = await signer.sendTransaction(tx);
-  //console.log("The transaction hash is", txHash);
+  const signedTx = await signer.signTransaction(tx);
 
-  // destroy vote cell to get back ckb
+  console.log("signed tx: ", ccc.stringify(signedTx));
 
-  // for test we haven't send vote tx yet, so no need destroy
-  // const destroyTx = Transaction.from({
-  //   inputs: [
-  //     {
-  //       previousOutput: {
-  //         txHash: tx.hash(),
-  //         index: 0,
-  //       },
-  //       since: 0,
-  //     }
-  //   ],
-  //   outputs: [
-  //     {
-  //       lock: voteAddr.script,
-  //       type: null,
-  //     }
-  //   ],
-  //   outputsData: ["0x"],
-  // })
-  // await destroyTx.completeInputsByCapacity(signer);
-  // await destroyTx.completeFeeBy(signer);
-  // await signer.signTransaction(destroyTx);
-  // console.log("destroy tx: ", ccc.stringify(destroyTx));
-  // console.log("destroy tx hash: ", destroyTx.hash());
+  const txHash = await cccClient.sendTransaction(signedTx);
+  console.log("vote transaction hash is", txHash);
 }
 
 main().then(() => process.exit());

@@ -11,7 +11,7 @@ import {
 } from "@ckb-ccc/core";
 
 // table VoteMeta {
-//     smt_root_hash: BytesOpt,
+//     smt_root_hash: Byte32Opt,
 //     candidates: StringVec,
 //     start_time: Uint64,
 //     end_time: Uint64,
@@ -28,7 +28,7 @@ export type VoteMetaLike = {
 
 @mol.codec(
   mol.table({
-    smt_root_hash: mol.BytesOpt,
+    smt_root_hash: mol.Byte32Opt,
     candidates: mol.StringVec,
     start_time: mol.Uint64,
     end_time: mol.Uint64,
