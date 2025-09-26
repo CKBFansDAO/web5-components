@@ -123,7 +123,12 @@ pub async fn server(
 
         if let Ok(Some(block)) = ret {
             // proc transactions in block
-            for tx in block.transactions.into_iter() {
+            for (index, tx) in block.transactions.into_iter().enumerate() {
+                // ignore cellbase transaction
+                if index == 0 {
+                    continue;
+                }
+
                 // verify transaction
                 if let Ok((from, to, timestamp)) =
                     verify_tx(ckb_client, network_type, &tx.inner).await
