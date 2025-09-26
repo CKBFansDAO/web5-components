@@ -55,12 +55,11 @@ async fn main() {
             match ret {
                 Ok((from, to, timestamp)) => {
                     println!(
-                        "tx {} has valid bind info, from: {}, to: {}, timestamp: {}",
-                        tx_hash, from, to, timestamp
+                        "tx {tx_hash} has valid bind info, from: {from}, to: {to}, timestamp: {timestamp}"
                     );
                 }
                 Err(e) => {
-                    println!("tx {} is invalid, err: {}", tx_hash, e);
+                    println!("tx {tx_hash} is invalid, err: {e}");
                 }
             }
         }
@@ -71,7 +70,7 @@ async fn main() {
             let ckb_client = CkbRpcClient::new(cli.url.as_str());
             let ret = indexer::server(&ckb_client, network_type, start_height, listen_port).await;
             if let Err(e) = ret {
-                eprintln!("indexer server error: {}", e);
+                println!("indexer server error: {e}");
             }
         }
     }

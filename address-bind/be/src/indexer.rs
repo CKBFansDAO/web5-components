@@ -5,7 +5,7 @@ use rusqlite::{Connection, Result};
 use std::time::Duration;
 use tokio::time::sleep;
 
-// 定义查询处理函数
+// define query handler
 async fn query_by_from(
     axum::extract::Path(from): axum::extract::Path<String>,
 ) -> impl axum::response::IntoResponse {
@@ -66,11 +66,11 @@ pub async fn server(
     start_height: u64,
     listen_port: u64,
 ) -> Result<(), String> {
-    // 打开 SQLite 数据库
+    // open SQLite
     let conn =
         Connection::open("bind_info.db").map_err(|_| "Failed to open database".to_string())?;
 
-    // 创建表（如果不存在）
+    // create table
     conn.execute(
         "CREATE TABLE IF NOT EXISTS sync_status (height INTEGER PRIMARY KEY)",
         [],
@@ -82,7 +82,7 @@ pub async fn server(
     )
     .map_err(|_| "Failed to create table bind_info".to_string())?;
 
-    // 获取上次同步的高度
+    // get last sync height
     let mut current_height = conn
         .query_row(
             "SELECT height FROM sync_status ORDER BY height DESC LIMIT 1",
@@ -91,41 +91,45 @@ pub async fn server(
         )
         .unwrap_or(start_height);
 
-    // start http server on listen_port 
-    let app = axum::Router::new()
-        .route("/by_from/:from", axum::routing::get(query_by_from))
-        .route("/by_to/:to", axum::routing::get(query_by_to));
+    tokio::spawn(async move {
+        // start http server on listen_port
+        let app = axum::Router::new()
+            .route("/by_from/{from}", axum::routing::get(query_by_from))
+            .route("/by_to/{to}", axum::routing::get(query_by_to))
+            .route("/health", axum::routing::get(|| async { "OK" }));
 
-    let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", listen_port)).await.unwrap();
-    axum::serve(listener, app).await
-        .map_err(|e| format!("Server error: {}", e))?;
+        let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{listen_port}"))
+            .await
+            .unwrap();
+        axum::serve(listener, app).await.unwrap();
+    });
 
     loop {
-        // 获取最新区块高度
+        // get latest block height
         let tip_block = ckb_client
             .get_tip_block_number()
-            .map_err(|e| "Failed to get tip block number".to_string())?;
+            .map_err(|_e| "Failed to get tip block number".to_string())?;
 
-        // 如果已经同步到最新高度，等待新区块
+        // if already synced to latest height, wait for new block
         if current_height >= tip_block.into() {
             sleep(Duration::from_secs(10)).await;
             continue;
         }
 
-        // 获取当前高度的区块
+        // get block by number
         let ret = ckb_client.get_block_by_number(BlockNumber::from(current_height));
 
-        println!("current_height: {}", current_height);
+        println!("current_height: {current_height}");
 
         if let Ok(Some(block)) = ret {
-            // 遍历区块中的所有交易
+            // proc transactions in block
             for tx in block.transactions.into_iter() {
-                // 验证交易
+                // verify transaction
                 if let Ok((from, to, timestamp)) =
                     verify_tx(ckb_client, network_type, &tx.inner).await
                 {
-                    println!("from: {}, to: {}, timestamp: {}", from, to, timestamp);
-                    // 记录绑定信息到数据库
+                    println!("from: {from}, to: {to}, timestamp: {timestamp}");
+                    // insert bind info to db
                     conn.execute(
                         "INSERT OR REPLACE INTO bind_info (from_addr, to_addr, timestamp) VALUES (?1, ?2, ?3)",
                         [&from, &to, &timestamp.to_string()],
@@ -134,7 +138,8 @@ pub async fn server(
                 }
             }
 
-            // 更新同步高度
+            // update sync height
+            // not too frequently
             if current_height % 100 == 0 {
                 conn.execute(
                     "INSERT OR REPLACE INTO sync_status (height) VALUES (?1)",

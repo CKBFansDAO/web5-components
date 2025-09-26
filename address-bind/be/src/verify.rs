@@ -13,10 +13,10 @@ use secp256k1::{Error, Message, PublicKey, ecdsa};
 pub async fn get_tx(ckb_client: &CkbRpcClient, tx_hash: H256) -> Result<Transaction, String> {
     let tx_either = ckb_client
         .get_transaction(tx_hash)
-        .unwrap()
-        .unwrap()
+        .map_err(|e| format!("Failed to get transaction: {e}"))?
+        .ok_or("tx not found".to_string())?
         .transaction
-        .unwrap()
+        .ok_or("tx not found".to_string())?
         .inner;
     match tx_either {
         Either::Left(tx_view) => {
@@ -38,8 +38,8 @@ fn recover(msg_digest: [u8; 32], sig: [u8; 64], recovery_id: u8) -> Result<Publi
 
 // from address must be secp256/blake160
 pub fn calculate_from_address(script: &crate::bind::Script, network: NetworkType) -> Address {
-    let code_hash = H256::from_slice(&script.code_hash().raw_data().to_vec()).unwrap();
-    let args = H160::from_slice(&script.args().raw_data().to_vec())
+    let code_hash = H256::from_slice(&script.code_hash().raw_data()).unwrap();
+    let args = H160::from_slice(&script.args().raw_data())
         .unwrap()
         .as_bytes()
         .to_owned();
@@ -74,7 +74,7 @@ pub async fn verify_tx(
     // input lock script must be equal to output lock script
     let pre_tx_hash = tx.inputs[0].previous_output.tx_hash.clone();
     let pre_index: u32 = tx.inputs[0].previous_output.index.into();
-    let pre_tx = get_tx(&ckb_client, pre_tx_hash).await?;
+    let pre_tx = get_tx(ckb_client, pre_tx_hash).await?;
     let pre_output = pre_tx.outputs[pre_index as usize].clone();
     let pre_output_lock_script = pre_output.lock.clone();
     let output_lock_script = tx.outputs[0].lock.clone();
@@ -114,13 +114,13 @@ pub async fn verify_tx(
 
     // verify sig
     // message is hex string with 0x
-    let message = format!("Nervos Message:0x{}", hex::encode(&bind_info_bytes));
+    let message = format!("Nervos Message:0x{}", hex::encode(bind_info_bytes));
     let message_hash = ckb_hash::blake2b_256(message.as_bytes());
     let mut sig: [u8; 64] = [0; 64];
     sig.copy_from_slice(&sig_bytes[0..64]);
     let recovery_id: u8 = sig_bytes[64];
     let ret = recover(message_hash, sig, recovery_id);
-    if let Err(e) = ret {
+    if let Err(_e) = ret {
         return Err("recover error".to_string());
     }
     let pubkey = ret.unwrap();
