@@ -7,11 +7,6 @@ async function main() {
   const cccClient = new ccc.ClientPublicTestnet();
   const signer = new ccc.SignerCkbPrivateKey(cccClient, '0x88179b7e387921a193f459859d8ff461e973a93a449b4930179928dbc53a04ba');
 
-  const fromAddress =
-    "ckt1qzda0cr08m85hc8jlnfp3zer7xulejywt49kt2rr0vthywaa50xwsqwu8lmjcalepgp5k6d4j0mtxwww68v9m6qz0q8ah";
-
-  const fromAddr = await ccc.Address.fromString(fromAddress, cccClient);
-
   const toAddress =
     "ckt1qzda0cr08m85hc8jlnfp3zer7xulejywt49kt2rr0vthywaa50xwsqwu8lmjcalepgp5k6d4j0mtxwww68v9m6qz0q8ah";
 
@@ -22,7 +17,6 @@ async function main() {
   console.log("time now: ", timeNow);
 
   const bindInfoLike = {
-    from: fromAddr.script,
     to: toAddr.script,
     timestamp: BigInt(timeNow)
   }

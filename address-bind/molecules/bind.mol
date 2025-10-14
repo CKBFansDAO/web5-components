@@ -9,7 +9,6 @@ table Script {
 }
 
 table BindInfo {
-    from: Script,
     to: Script,
     timestamp: Uint64,
 }

@@ -1691,8 +1691,7 @@ impl ::core::fmt::Debug for BindInfo {
 impl ::core::fmt::Display for BindInfo {
     fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
         write!(f, "{} {{ ", Self::NAME)?;
-        write!(f, "{}: {}", "from", self.from())?;
-        write!(f, ", {}: {}", "to", self.to())?;
+        write!(f, "{}: {}", "to", self.to())?;
         write!(f, ", {}: {}", "timestamp", self.timestamp())?;
         let extra_count = self.count_extra_fields();
         if extra_count != 0 {
@@ -1708,14 +1707,12 @@ impl ::core::default::Default for BindInfo {
     }
 }
 impl BindInfo {
-    const DEFAULT_VALUE: [u8; 130] = [
-        130, 0, 0, 0, 16, 0, 0, 0, 69, 0, 0, 0, 122, 0, 0, 0, 53, 0, 0, 0, 16, 0, 0, 0, 48, 0, 0,
-        0, 49, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 53, 0, 0, 0, 16, 0, 0, 0, 48, 0, 0, 0, 49, 0, 0, 0, 0,
+    const DEFAULT_VALUE: [u8; 73] = [
+        73, 0, 0, 0, 12, 0, 0, 0, 65, 0, 0, 0, 53, 0, 0, 0, 16, 0, 0, 0, 48, 0, 0, 0, 49, 0, 0, 0,
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     ];
-    pub const FIELD_COUNT: usize = 3;
+    pub const FIELD_COUNT: usize = 2;
     pub fn total_size(&self) -> usize {
         molecule::unpack_number(self.as_slice()) as usize
     }
@@ -1732,23 +1729,17 @@ impl BindInfo {
     pub fn has_extra_fields(&self) -> bool {
         Self::FIELD_COUNT != self.field_count()
     }
-    pub fn from(&self) -> Script {
+    pub fn to(&self) -> Script {
         let slice = self.as_slice();
         let start = molecule::unpack_number(&slice[4..]) as usize;
         let end = molecule::unpack_number(&slice[8..]) as usize;
         Script::new_unchecked(self.0.slice(start..end))
     }
-    pub fn to(&self) -> Script {
-        let slice = self.as_slice();
-        let start = molecule::unpack_number(&slice[8..]) as usize;
-        let end = molecule::unpack_number(&slice[12..]) as usize;
-        Script::new_unchecked(self.0.slice(start..end))
-    }
     pub fn timestamp(&self) -> Uint64 {
         let slice = self.as_slice();
-        let start = molecule::unpack_number(&slice[12..]) as usize;
+        let start = molecule::unpack_number(&slice[8..]) as usize;
         if self.has_extra_fields() {
-            let end = molecule::unpack_number(&slice[16..]) as usize;
+            let end = molecule::unpack_number(&slice[12..]) as usize;
             Uint64::new_unchecked(self.0.slice(start..end))
         } else {
             Uint64::new_unchecked(self.0.slice(start..))
@@ -1781,7 +1772,6 @@ impl molecule::prelude::Entity for BindInfo {
     }
     fn as_builder(self) -> Self::Builder {
         Self::new_builder()
-            .from(self.from())
             .to(self.to())
             .timestamp(self.timestamp())
     }
@@ -1805,8 +1795,7 @@ impl<'r> ::core::fmt::Debug for BindInfoReader<'r> {
 impl<'r> ::core::fmt::Display for BindInfoReader<'r> {
     fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
         write!(f, "{} {{ ", Self::NAME)?;
-        write!(f, "{}: {}", "from", self.from())?;
-        write!(f, ", {}: {}", "to", self.to())?;
+        write!(f, "{}: {}", "to", self.to())?;
         write!(f, ", {}: {}", "timestamp", self.timestamp())?;
         let extra_count = self.count_extra_fields();
         if extra_count != 0 {
@@ -1816,7 +1805,7 @@ impl<'r> ::core::fmt::Display for BindInfoReader<'r> {
     }
 }
 impl<'r> BindInfoReader<'r> {
-    pub const FIELD_COUNT: usize = 3;
+    pub const FIELD_COUNT: usize = 2;
     pub fn total_size(&self) -> usize {
         molecule::unpack_number(self.as_slice()) as usize
     }
@@ -1833,23 +1822,17 @@ impl<'r> BindInfoReader<'r> {
     pub fn has_extra_fields(&self) -> bool {
         Self::FIELD_COUNT != self.field_count()
     }
-    pub fn from(&self) -> ScriptReader<'r> {
+    pub fn to(&self) -> ScriptReader<'r> {
         let slice = self.as_slice();
         let start = molecule::unpack_number(&slice[4..]) as usize;
         let end = molecule::unpack_number(&slice[8..]) as usize;
         ScriptReader::new_unchecked(&self.as_slice()[start..end])
     }
-    pub fn to(&self) -> ScriptReader<'r> {
-        let slice = self.as_slice();
-        let start = molecule::unpack_number(&slice[8..]) as usize;
-        let end = molecule::unpack_number(&slice[12..]) as usize;
-        ScriptReader::new_unchecked(&self.as_slice()[start..end])
-    }
     pub fn timestamp(&self) -> Uint64Reader<'r> {
         let slice = self.as_slice();
-        let start = molecule::unpack_number(&slice[12..]) as usize;
+        let start = molecule::unpack_number(&slice[8..]) as usize;
         if self.has_extra_fields() {
-            let end = molecule::unpack_number(&slice[16..]) as usize;
+            let end = molecule::unpack_number(&slice[12..]) as usize;
             Uint64Reader::new_unchecked(&self.as_slice()[start..end])
         } else {
             Uint64Reader::new_unchecked(&self.as_slice()[start..])
@@ -1903,26 +1886,17 @@ impl<'r> molecule::prelude::Reader<'r> for BindInfoReader<'r> {
             return ve!(Self, OffsetsNotMatch);
         }
         ScriptReader::verify(&slice[offsets[0]..offsets[1]], compatible)?;
-        ScriptReader::verify(&slice[offsets[1]..offsets[2]], compatible)?;
-        Uint64Reader::verify(&slice[offsets[2]..offsets[3]], compatible)?;
+        Uint64Reader::verify(&slice[offsets[1]..offsets[2]], compatible)?;
         Ok(())
     }
 }
 #[derive(Clone, Debug, Default)]
 pub struct BindInfoBuilder {
-    pub(crate) from: Script,
     pub(crate) to: Script,
     pub(crate) timestamp: Uint64,
 }
 impl BindInfoBuilder {
-    pub const FIELD_COUNT: usize = 3;
-    pub fn from<T>(mut self, v: T) -> Self
-    where
-        T: ::core::convert::Into<Script>,
-    {
-        self.from = v.into();
-        self
-    }
+    pub const FIELD_COUNT: usize = 2;
     pub fn to<T>(mut self, v: T) -> Self
     where
         T: ::core::convert::Into<Script>,
@@ -1943,15 +1917,12 @@ impl molecule::prelude::Builder for BindInfoBuilder {
     const NAME: &'static str = "BindInfoBuilder";
     fn expected_length(&self) -> usize {
         molecule::NUMBER_SIZE * (Self::FIELD_COUNT + 1)
-            + self.from.as_slice().len()
             + self.to.as_slice().len()
             + self.timestamp.as_slice().len()
     }
     fn write<W: molecule::io::Write>(&self, writer: &mut W) -> molecule::io::Result<()> {
         let mut total_size = molecule::NUMBER_SIZE * (Self::FIELD_COUNT + 1);
         let mut offsets = Vec::with_capacity(Self::FIELD_COUNT);
-        offsets.push(total_size);
-        total_size += self.from.as_slice().len();
         offsets.push(total_size);
         total_size += self.to.as_slice().len();
         offsets.push(total_size);
@@ -1960,7 +1931,6 @@ impl molecule::prelude::Builder for BindInfoBuilder {
         for offset in offsets.into_iter() {
             writer.write_all(&molecule::pack_number(offset as molecule::Number))?;
         }
-        writer.write_all(self.from.as_slice())?;
         writer.write_all(self.to.as_slice())?;
         writer.write_all(self.timestamp.as_slice())?;
         Ok(())
@@ -2007,12 +1977,11 @@ impl ::core::default::Default for BindInfoWithSig {
     }
 }
 impl BindInfoWithSig {
-    const DEFAULT_VALUE: [u8; 146] = [
-        146, 0, 0, 0, 12, 0, 0, 0, 142, 0, 0, 0, 130, 0, 0, 0, 16, 0, 0, 0, 69, 0, 0, 0, 122, 0, 0,
-        0, 53, 0, 0, 0, 16, 0, 0, 0, 48, 0, 0, 0, 49, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 53, 0, 0, 0, 16,
-        0, 0, 0, 48, 0, 0, 0, 49, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    const DEFAULT_VALUE: [u8; 89] = [
+        89, 0, 0, 0, 12, 0, 0, 0, 85, 0, 0, 0, 73, 0, 0, 0, 12, 0, 0, 0, 65, 0, 0, 0, 53, 0, 0, 0,
+        16, 0, 0, 0, 48, 0, 0, 0, 49, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0,
     ];
     pub const FIELD_COUNT: usize = 2;
     pub fn total_size(&self) -> usize {

@@ -17,14 +17,12 @@ import {
 //     timestamp: Uint64,
 // }
 export type BindInfoLike = {
-  from: ScriptLike;
   to: ScriptLike;
   timestamp: NumLike;
 };
 
 @mol.codec(
   mol.table({
-    from: Script,
     to: Script,
     timestamp: mol.Uint64,
   }),
@@ -32,7 +30,6 @@ export type BindInfoLike = {
 
 export class BindInfo extends mol.Entity.Base<BindInfoLike, BindInfo>() {
   constructor(
-    public from: ScriptLike,
     public to: ScriptLike,
     public timestamp: NumLike,
   ) {
@@ -44,7 +41,6 @@ export class BindInfo extends mol.Entity.Base<BindInfoLike, BindInfo>() {
       return data;
     }
     return new BindInfo(
-      Script.from(data.from),
       Script.from(data.to),
       numFrom(data.timestamp),
     );

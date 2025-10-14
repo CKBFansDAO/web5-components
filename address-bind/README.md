@@ -4,10 +4,9 @@ bind address in a offline wallet(for example Neuron) to address in web wallet.
 
 ## steps
 
-1. generate bind info message. timestamp is unix timestamp in ms. from script must be Scep256k1/Blake160.
+1. generate bind info message. timestamp is unix timestamp in ms.
     ```
     table BindInfo {
-        from: Script,
         to: Script,
         timestamp: Uint64,
     }

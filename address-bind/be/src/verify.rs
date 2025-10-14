@@ -4,11 +4,13 @@ use ckb_jsonrpc_types::Transaction;
 use ckb_sdk::rpc::CkbRpcClient;
 use ckb_sdk::{Address, AddressPayload, NetworkType};
 use ckb_types::bytes::Bytes;
+use ckb_types::core::ScriptHashType;
 use ckb_types::prelude::Entity;
 use ckb_types::prelude::Pack;
 use ckb_types::{H160, H256, packed};
 use molecule::prelude::Builder;
 use secp256k1::{Error, Message, PublicKey, ecdsa};
+use std::str::FromStr;
 
 pub async fn get_tx(ckb_client: &CkbRpcClient, tx_hash: H256) -> Result<Transaction, String> {
     let tx_either = ckb_client
@@ -37,13 +39,11 @@ fn recover(msg_digest: [u8; 32], sig: [u8; 64], recovery_id: u8) -> Result<Publi
 }
 
 // from address must be secp256/blake160
-pub fn calculate_from_address(script: &crate::bind::Script, network: NetworkType) -> Address {
-    let code_hash = H256::from_slice(&script.code_hash().raw_data()).unwrap();
-    let args = H160::from_slice(&script.args().raw_data())
-        .unwrap()
-        .as_bytes()
-        .to_owned();
-    let hash_type = u8::from(script.hash_type());
+pub fn calculate_from_address(from_args: &[u8], network: NetworkType) -> Address {
+    let code_hash =
+        H256::from_str("9bd7e06f3ecf4be0f2fcd2188b23f1b9fcc88e5d4b65a8637b17723bbda3cce8").unwrap();
+    let args = H160::from_slice(from_args).unwrap().as_bytes().to_owned();
+    let hash_type = ScriptHashType::Type;
     let lock_script = packed::Script::new_builder()
         .code_hash(code_hash.pack())
         .args(Bytes::from(args).pack())
@@ -112,7 +112,7 @@ pub async fn verify_tx(
         return Err("bind_info_to not equal output_lock_script".to_string());
     }
 
-    // verify sig
+    // recover from address by sig
     // message is hex string with 0x
     let message = format!("Nervos Message:0x{}", hex::encode(bind_info_bytes));
     let message_hash = ckb_hash::blake2b_256(message.as_bytes());
@@ -125,17 +125,10 @@ pub async fn verify_tx(
     }
     let pubkey = ret.unwrap();
     let pubkey_hash = ckb_hash::blake2b_256(pubkey.serialize());
-    if &pubkey_hash[0..20] != bind_info.from().args().raw_data().to_vec().as_slice() {
-        println!(
-            "pubkey_hash: {:?}, bind_info_from: {:?}",
-            pubkey_hash,
-            bind_info.from().args().raw_data().to_vec()
-        );
-        return Err("pubkey_hash not equal bind_info_from".to_string());
-    }
+    let from_args = pubkey_hash[0..20].to_vec();
 
     let timestamp = u64::from_le_bytes(bind_info.timestamp().as_slice().try_into().unwrap());
-    let from_addr = calculate_from_address(&bind_info.from(), network);
+    let from_addr = calculate_from_address(&from_args, network);
     let to_addr = calculate_address(&output_lock_script.into(), network);
 
     Ok((from_addr.to_string(), to_addr.to_string(), timestamp))
