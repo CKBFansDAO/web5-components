@@ -10,7 +10,7 @@ COPY . /build/
 RUN cargo build --release
 
 FROM m.daocloud.io/docker.io/rust:slim-bullseye
-RUN useradd -m indexer
-USER indexer
-COPY --from=buildstage /build/target/release/indexer /usr/bin/
-CMD ["indexer", "--db-url $DB_URL"]
+RUN useradd -m address-bind-be
+USER address-bind-be
+COPY --from=buildstage /build/target/release/address-bind-be /usr/bin/
+CMD ["address-bind-be", "indexer", "--db-url $DB_URL"]

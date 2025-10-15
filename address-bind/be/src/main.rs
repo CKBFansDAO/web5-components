@@ -11,11 +11,11 @@ use ckb_sdk::rpc::CkbRpcClient;
 use ckb_types::H256;
 use clap::{Parser, Subcommand};
 
-#[derive(Parser, Clone)]
+#[derive(Parser, Debug, Clone)]
 #[command(author, version, about, long_about = None)]
 struct Cli {
     #[arg(short, long, default_value = "https://testnet.ckb.dev/")]
-    url: String,
+    ckb_url: String,
     #[arg(short, long, default_value = "ckb_testnet")]
     network: String,
     #[clap(short, long)]
@@ -24,17 +24,19 @@ struct Cli {
     command: Commands,
 }
 
-#[derive(Subcommand, Clone)]
+#[derive(Subcommand, Debug, Clone)]
 enum Commands {
     Verify {
         #[arg(short, long)]
         tx_hash: String,
     },
     Indexer {
+        #[clap(short, long, default_value = "info")]
+        log_filter: String,
         #[arg(short, long, default_value = "18_587_462")]
         start_height: u64,
         #[arg(short, long, default_value = "9533")]
-        listen_port: u16,
+        port: u16,
     },
 }
 
@@ -50,11 +52,11 @@ async fn main() {
     let network_type =
         NetworkType::from_raw_str(&cli.network).expect("network must be 'ckb' or 'ckb_testnet'");
 
-    match cli.command {
+    match &cli.command {
         Commands::Verify { tx_hash } => {
-            let ckb_client = CkbRpcClient::new(cli.url.as_str());
+            let ckb_client = CkbRpcClient::new(cli.ckb_url.as_str());
 
-            let mut tx_hash = tx_hash;
+            let mut tx_hash = tx_hash.clone();
             if tx_hash.starts_with("0x") {
                 tx_hash = tx_hash[2..].to_string();
             }
@@ -65,28 +67,25 @@ async fn main() {
             let ret = verify::verify_tx(&ckb_client, network_type, &tx).await;
             match ret {
                 Ok((from, to, timestamp)) => {
-                    info!(
+                    println!(
                         "tx {tx_hash} has valid bind info, from: {from}, to: {to}, timestamp: {timestamp}"
                     );
                 }
                 Err(e) => {
-                    info!("tx {tx_hash} is invalid, err: {e}");
+                    println!("tx {tx_hash} is invalid, err: {e}");
                 }
             }
         }
         Commands::Indexer {
+            log_filter,
             start_height,
-            listen_port,
+            port,
         } => {
-            let ckb_client = CkbRpcClient::new(cli.url.as_str());
-            let ret = indexer::server(
-                &ckb_client,
-                network_type,
-                &cli.db_url,
-                start_height,
-                listen_port,
-            )
-            .await;
+            common_x::log::init_log_filter(log_filter);
+            info!("args: {:?}", cli);
+            let ckb_client = CkbRpcClient::new(cli.ckb_url.as_str());
+            let ret =
+                indexer::server(&ckb_client, network_type, &cli.db_url, *start_height, *port).await;
             if let Err(e) = ret {
                 info!("indexer server error: {e}");
             }
