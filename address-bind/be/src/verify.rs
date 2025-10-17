@@ -71,6 +71,21 @@ pub async fn verify_tx(
         return Err("inputs_count or outputs_count not equal 1".to_string());
     }
 
+    // extract bind info with sig from witness
+    let witness = tx.witnesses[0].clone();
+    let witness_bytes = witness.into_bytes();
+    let witness_args = packed::WitnessArgs::from_compatible_slice(&witness_bytes)
+        .map_err(|e| format!("parse witness args failed: {e}"))?;
+
+    let input_type = if let Some(input_type) = witness_args.input_type().to_opt() {
+        input_type
+    } else {
+        return Err("input_type is None".to_string());
+    };
+    let bind_info_with_sig_bytes = input_type.raw_data().to_vec();
+    let bind_info_with_sig = BindInfoWithSig::from_compatible_slice(&bind_info_with_sig_bytes)
+        .map_err(|e| format!("parse bind info with sig failed: {e}"))?;
+
     // input lock script must be equal to output lock script
     let pre_tx_hash = tx.inputs[0].previous_output.tx_hash.clone();
     let pre_index: u32 = tx.inputs[0].previous_output.index.into();
@@ -85,18 +100,6 @@ pub async fn verify_tx(
     if pre_output_lock_script != output_lock_script {
         return Err("pre_output_lock_script not equal output_lock_script".to_string());
     }
-
-    // extract bind info with sig from witness
-    let witness = tx.witnesses[0].clone();
-    let witness_bytes = witness.into_bytes();
-    let witness_args = packed::WitnessArgs::from_compatible_slice(&witness_bytes).unwrap();
-    if witness_args.input_type().is_none() {
-        return Err("input_type is None".to_string());
-    }
-    let input_type = witness_args.input_type().to_opt().unwrap();
-    let bind_info_with_sig_bytes = input_type.raw_data().to_vec();
-    let bind_info_with_sig =
-        BindInfoWithSig::from_compatible_slice(&bind_info_with_sig_bytes).unwrap();
 
     let bind_info = bind_info_with_sig.bind_info();
     let sig = bind_info_with_sig.sig();
