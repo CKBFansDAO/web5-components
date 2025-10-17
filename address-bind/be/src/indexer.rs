@@ -124,7 +124,7 @@ pub async fn server(
             if current_height >= tip_block {
                 sleep(Duration::from_secs(1)).await;
                 continue;
-            } else {
+            } else if current_height.is_multiple_of(10) {
                 info!(
                     "tip_block: {tip_block}, current_height: {current_height}, waiting block: {}",
                     tip_block - current_height
