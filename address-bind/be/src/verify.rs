@@ -74,7 +74,9 @@ pub async fn verify_tx(
     // input lock script must be equal to output lock script
     let pre_tx_hash = tx.inputs[0].previous_output.tx_hash.clone();
     let pre_index: u32 = tx.inputs[0].previous_output.index.into();
-    let pre_tx = get_tx(ckb_client, pre_tx_hash).await?;
+    let pre_tx = get_tx(ckb_client, pre_tx_hash)
+        .await
+        .map_err(|e| format!("get_tx failed: {e}"))?;
     let pre_output = pre_tx.outputs[pre_index as usize].clone();
     let pre_output_lock_script = pre_output.lock.clone();
     let output_lock_script = tx.outputs[0].lock.clone();

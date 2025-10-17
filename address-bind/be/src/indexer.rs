@@ -118,20 +118,25 @@ pub async fn server(
 
     loop {
         // get latest block height
-        let tip_block = ckb_client
-            .get_tip_block_number()
-            .map_err(|_e| eyre!("Failed to get tip block number"))?;
-
-        // if already synced to latest height, wait for new block
-        if current_height >= tip_block.into() {
-            sleep(Duration::from_secs(10)).await;
+        if let Ok(tip_block) = ckb_client.get_tip_block_number() {
+            // if already synced to latest height, wait for new block
+            let tip_block = tip_block.value();
+            if current_height >= tip_block {
+                sleep(Duration::from_secs(1)).await;
+                continue;
+            } else {
+                info!(
+                    "tip_block: {tip_block}, current_height: {current_height}, waiting block: {}",
+                    tip_block - current_height
+                );
+            }
+        } else {
+            sleep(Duration::from_secs(1)).await;
             continue;
         }
 
         // get block by number
         let ret = ckb_client.get_block_by_number(BlockNumber::from(current_height));
-
-        info!("current_height: {current_height}");
 
         if let Ok(Some(block)) = ret {
             // proc transactions in block
@@ -142,28 +147,35 @@ pub async fn server(
                 }
 
                 // verify transaction
-                if let Ok((from, to, timestamp)) =
-                    verify_tx(ckb_client, network_type, &tx.inner).await
-                {
-                    info!("from: {from}, to: {to}, timestamp: {timestamp}");
-                    // insert bind info to db
-                    db.execute(query(
-                        &format!("INSERT OR REPLACE INTO bind_info (from_addr, to_addr, timestamp) VALUES ('{from}', '{to}', '{timestamp}')"
-                        )
-                    ))
-                    .await
-                    .map_err(|_| eyre!("Failed to insert bind info"))?;
+                match verify_tx(ckb_client, network_type, &tx.inner).await {
+                    Ok((from, to, timestamp)) => {
+                        info!("from: {from}, to: {to}, timestamp: {timestamp}");
+                        // insert bind info to db
+                        if let Err(e) = db.execute(query(
+                            &format!("INSERT INTO bind_info (from_addr, to_addr, timestamp) VALUES ('{from}', '{to}', '{timestamp}')")
+                        ))
+                        .await {
+                            error!("Failed to insert bind info: {e}");
+                        }
+                    }
+                    Err(e) => {
+                        if e.contains("get_tx failed") {
+                            error!("verify_tx {} is failed, err: {e}", tx.hash);
+                        }
+                    }
                 }
             }
 
             // update sync height
             // not too frequently
-            if current_height.is_multiple_of(100) {
-                db.execute(query(&format!(
-                    "INSERT OR REPLACE INTO sync_status (height) VALUES ('{current_height}')"
-                )))
-                .await
-                .map_err(|_| eyre!("Failed to update sync status"))?;
+            if current_height.is_multiple_of(100)
+                && let Err(e) = db
+                    .execute(query(&format!(
+                        "INSERT INTO sync_status (height) VALUES ('{current_height}') ON CONFLICT (height) DO NOTHING;"
+                    )))
+                    .await
+            {
+                error!("Failed to update sync status: {e}");
             }
 
             current_height += 1;

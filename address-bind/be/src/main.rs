@@ -35,6 +35,7 @@ enum Commands {
         log_filter: String,
         #[arg(short, long, default_value = "18_587_462")]
         start_height: u64,
+
         #[arg(short, long, default_value = "9533")]
         port: u16,
     },
