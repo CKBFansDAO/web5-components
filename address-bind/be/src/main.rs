@@ -18,8 +18,6 @@ struct Cli {
     ckb_url: String,
     #[arg(short, long, default_value = "ckb_testnet")]
     network: String,
-    #[clap(short, long)]
-    db_url: String,
     #[command(subcommand)]
     command: Commands,
 }
@@ -31,11 +29,12 @@ enum Commands {
         tx_hash: String,
     },
     Indexer {
-        #[clap(short, long, default_value = "info")]
+        #[arg(short, long, default_value = "info")]
         log_filter: String,
         #[arg(short, long, default_value = "18_587_462")]
         start_height: u64,
-
+        #[arg(short, long)]
+        db_url: String,
         #[arg(short, long, default_value = "9533")]
         port: u16,
     },
@@ -81,12 +80,13 @@ async fn main() {
             log_filter,
             start_height,
             port,
+            db_url,
         } => {
             common_x::log::init_log_filter(log_filter);
             info!("args: {:?}", cli);
             let ckb_client = CkbRpcClient::new(cli.ckb_url.as_str());
             let ret =
-                indexer::server(&ckb_client, network_type, &cli.db_url, *start_height, *port).await;
+                indexer::server(&ckb_client, network_type, db_url, *start_height, *port).await;
             if let Err(e) = ret {
                 info!("indexer server error: {e}");
             }

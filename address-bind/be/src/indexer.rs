@@ -86,10 +86,10 @@ pub async fn server(
         .await?;
 
     // create table
-    db.execute("CREATE TABLE IF NOT EXISTS sync_status (height INTEGER PRIMARY KEY)")
+    db.execute("CREATE TABLE IF NOT EXISTS sync_status (height BIGINT PRIMARY KEY)")
         .await?;
     db.execute(
-        "CREATE TABLE IF NOT EXISTS bind_info (from_addr TEXT, to_addr TEXT, timestamp INTEGER, UNIQUE(from_addr, to_addr, timestamp))",
+        "CREATE TABLE IF NOT EXISTS bind_info (from_addr TEXT, to_addr TEXT, timestamp BIGINT, UNIQUE(from_addr, to_addr, timestamp))",
     ).await?;
 
     // get last sync height
@@ -159,7 +159,7 @@ pub async fn server(
                         }
                     }
                     Err(e) => {
-                        if e.contains("get_tx failed") {
+                        if e.contains("get_tx failed") || e.contains("sig_bytes") {
                             error!("verify_tx {} is failed, err: {e}", tx.hash);
                         }
                     }
@@ -181,4 +181,34 @@ pub async fn server(
             current_height += 1;
         }
     }
+}
+
+#[tokio::test]
+async fn test_one() -> Result<()> {
+    common_x::log::init_log_filter("info");
+    let ckb_client = CkbRpcClient::new("https://testnet.ckb.dev/");
+    let ret = ckb_client.get_block_by_number(BlockNumber::from(18977278));
+
+    if let Ok(Some(block)) = ret {
+        // proc transactions in block
+        for (index, tx) in block.transactions.into_iter().enumerate() {
+            // ignore cellbase transaction
+            if index == 0 {
+                continue;
+            }
+
+            // verify transaction
+            match verify_tx(&ckb_client, NetworkType::Testnet, &tx.inner).await {
+                Ok((from, to, timestamp)) => {
+                    info!("from: {from}, to: {to}, timestamp: {timestamp}");
+                }
+                Err(e) => {
+                    if e.contains("get_tx failed") {
+                        error!("verify_tx {} is failed, err: {e}", tx.hash);
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
 }
