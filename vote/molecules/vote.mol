@@ -8,7 +8,7 @@ option StringOpt (String);
 vector StringVec <String>;
 
 table VoteMeta {
-    smt_root_hash: BytesOpt,
+    smt_root_hash: Byte32Opt,
     candidates: StringVec,
     start_time: Uint64,
     end_time: Uint64,
