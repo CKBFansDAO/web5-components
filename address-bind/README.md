@@ -42,7 +42,7 @@ bind address:
 
 scanner:
 1. scan ckb tx. filter bind address tx.
-2. for each bind address tx, verify signature in BindInfoWithSig.
+2. for each bind address tx, verify signature in BindInfoWithSig, and check timestamp is around current block timestamp(within 20min).
 3. if valid, record bind relationship in database. for same from address, bind info with later timestamp will update bind relationship.
 
 api:

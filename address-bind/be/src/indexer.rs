@@ -172,6 +172,8 @@ pub async fn server(
         let ret = ckb_client.get_block_by_number(BlockNumber::from(current_height));
 
         if let Ok(Some(block)) = ret {
+            let block_timestamp = u64::from(block.header.inner.timestamp);
+
             // proc transactions in block
             for (index, tx) in block.transactions.into_iter().enumerate() {
                 // ignore cellbase transaction
@@ -183,6 +185,17 @@ pub async fn server(
                 match verify_tx(ckb_client, network_type, &tx.inner).await {
                     Ok((from, to, timestamp)) => {
                         info!("from: {from}, to: {to}, timestamp: {timestamp}");
+
+                        // check timestamp is around current block timestamp, within 20min
+                        if timestamp < block_timestamp - 20 * 60 * 1000
+                            || timestamp > block_timestamp + 20 * 60 * 1000
+                        {
+                            error!(
+                                "timestamp {timestamp} is out of range, block_timestamp: {block_timestamp}"
+                            );
+                            continue;
+                        }
+
                         // insert bind info to db
                         if let Err(e) = db
                             .execute(query(
@@ -199,7 +212,10 @@ pub async fn server(
                         }
                     }
                     Err(e) => {
-                        if e.contains("get_tx failed") || e.contains("sig_bytes") {
+                        if e.contains("get_tx failed")
+                            || e.contains("sig_bytes")
+                            || e.contains("timestamp is out of range")
+                        {
                             error!("verify_tx {} is failed, err: {e}", tx.hash);
                         }
                     }
@@ -231,6 +247,8 @@ async fn test_one() -> Result<()> {
     let ret = ckb_client.get_block_by_number(BlockNumber::from(18977278));
 
     if let Ok(Some(block)) = ret {
+        let block_timestamp = u64::from(block.header.inner.timestamp);
+        info!("block_timestamp: {block_timestamp}");
         // proc transactions in block
         for (index, tx) in block.transactions.into_iter().enumerate() {
             // ignore cellbase transaction
@@ -242,6 +260,15 @@ async fn test_one() -> Result<()> {
             match verify_tx(&ckb_client, NetworkType::Testnet, &tx.inner).await {
                 Ok((from, to, timestamp)) => {
                     info!("from: {from}, to: {to}, timestamp: {timestamp}");
+                    // check timestamp is around current block timestamp, within 20min
+                    if timestamp < block_timestamp - 20 * 60 * 1000
+                        || timestamp > block_timestamp + 20 * 60 * 1000
+                    {
+                        error!(
+                            "timestamp {timestamp} is out of range, block_timestamp: {block_timestamp}"
+                        );
+                        continue;
+                    }
                 }
                 Err(e) => {
                     if e.contains("get_tx failed") {
@@ -360,8 +387,6 @@ mod tests {
                            ORDER BY height DESC, tx_index DESC"
         );
         let rows: Vec<(String, i64, i32)> = query_as(&sql).bind("F1").fetch_all(&db).await?;
-
-        println!("{:?}", rows);
 
         // First row should be height=103, tx_index=5
         assert!(!rows.is_empty());
