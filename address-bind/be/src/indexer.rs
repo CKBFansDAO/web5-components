@@ -75,6 +75,36 @@ async fn query_by_to(
     Ok(ok(result))
 }
 
+// like query_by_to, but excludes rows with height greater than specified
+async fn query_by_to_at_height(
+    State(state): State<Indexer>,
+    Path((to, height)): Path<(String, i64)>,
+) -> Result<impl IntoResponse, AppError> {
+    let rows: Vec<(String, i64, i32)> = query_as(
+        "SELECT DISTINCT ON (from_addr) from_addr, height, tx_index
+         FROM bind_info
+         WHERE to_addr = $1 AND height <= $2
+         ORDER BY from_addr, height DESC, tx_index DESC",
+    )
+    .bind(&to)
+    .bind(height)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|e| eyre!("exec sql failed: {e}"))?;
+    let result: Vec<_> = rows
+        .iter()
+        .map(|row| {
+            serde_json::json!({
+                "from": row.0,
+                "height": row.1,
+                "tx_index": row.2
+            })
+        })
+        .collect();
+
+    Ok(ok(result))
+}
+
 pub async fn server(
     ckb_client: &CkbRpcClient,
     network_type: NetworkType,
@@ -109,6 +139,7 @@ pub async fn server(
         let app = Router::new()
             .route("/by_from/{from}", get(query_by_from))
             .route("/by_to/{to}", get(query_by_to))
+            .route("/by_to_at_height/{to}/{height}", get(query_by_to_at_height))
             .layer((TimeoutLayer::new(Duration::from_secs(10)),))
             .layer(CorsLayer::permissive())
             .with_state(indexer);
@@ -160,9 +191,9 @@ pub async fn server(
                             )
                             .bind(&from)
                             .bind(&to)
-                            .bind(&(timestamp as i64))
-                            .bind(&(current_height as i64))
-                            .bind(&(index as i32)))
+                            .bind(timestamp as i64)
+                            .bind(current_height as i64)
+                            .bind(index as i32))
                         .await {
                             error!("Failed to insert bind info: {e}");
                         }
@@ -182,7 +213,7 @@ pub async fn server(
                     .execute(query(
                         "INSERT INTO sync_status (height) VALUES ($1) ON CONFLICT (height) DO NOTHING;"
                     )
-                    .bind(&(current_height as i64)))
+                    .bind(current_height as i64))
                     .await
             {
                 error!("Failed to update sync status: {e}");
@@ -338,6 +369,37 @@ mod tests {
         assert_eq!(to, "T1");
         assert_eq!(*height, 103_i64);
         assert_eq!(*tx_index, 5_i32);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_query_by_to_at_height_cutoff() -> Result<()> {
+        let Some(db) = get_test_db().await else {
+            eprintln!("Skipped test_query_by_to_at_height_cutoff: TEST_DB_URL/DB_URL not set");
+            return Ok(());
+        };
+        let s = test_schema("toheight");
+        setup_schema(&db, &s).await?;
+        seed_data(&db, &s).await?;
+
+        // Same data as before; cut off at height <= 100
+        let sql = format!(
+            "SELECT DISTINCT ON (from_addr) from_addr, height, tx_index
+                         FROM {s}.bind_info
+                         WHERE to_addr = $1 AND height <= $2
+                         ORDER BY from_addr, height DESC, tx_index DESC"
+        );
+        let rows: Vec<(String, i64, i32)> = query_as(&sql)
+            .bind("T1")
+            .bind(100_i64)
+            .fetch_all(&db)
+            .await?;
+
+        // Expect F1 excluded (latest at 103), F2 included with height 100, tx_index=6
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].0, "F2");
+        assert_eq!(rows[0].1, 100_i64);
+        assert_eq!(rows[0].2, 6_i32);
         Ok(())
     }
 }
