@@ -30,14 +30,14 @@ API documentation including:
    
    - Description: Query binding information by from address
    - Parameters: from - The source address to query
-   - Response: Array containing target address (to) and timestamp for each binding record
+   - Response: Array containing target address (to) and height, tx_index for each binding record
 2.
    /by_to/:to endpoint
    
    - Description: Query binding information by to address
    - Parameters: to - The target address to query
-   - Response: Array containing source address (from) and timestamp for each binding record
-   - Note: For each from address, only returns the record with the latest timestamp
+   - Response: Array containing source address (from) and height, tx_index for each binding record
+   - Note: For each from address, only returns the record with the latest height, tx_index
 3.
    /health endpoint
    
@@ -47,9 +47,8 @@ API documentation including:
 
 ```
 $ curl http://localhost:9533/by_from/ckt1qzda0cr08m85hc8jlnfp3zer7xulejywt49kt2rr0vthywaa50xwsqwu8lmjcalepgp5k6d4j0mtxwww68v9m6qz0q8ahah
-[{"timestamp":1757472675162,"to":"ckt1qzda0cr08m85hc8jlnfp3zer7xulejywt49kt2rr0vthywaa50xwsqwu8lmjcalepgp5k6d4j0mtxwww68v9m6qz0q8ah"}]
+[{"height":18977278, "tx_index":1, "to":"ckt1qzda0cr08m85hc8jlnfp3zer7xulejywt49kt2rr0vthywaa50xwsqwu8lmjcalepgp5k6d4j0mtxwww68v9m6qz0q8ah"}]
 
 $ curl -vv http://localhost:9533/by_to/ckt1qzda0cr08m85hc8jlnfp3zer7xulejywt49kt2rr0vthywaa50xwsqwu8lmjcalepgp5k6d4j0mtxwww68v9m6qz0q8ah
-
-[{"from":"ckt1qzda0cr08m85hc8jlnfp3zer7xulejywt49kt2rr0vthywaa50xwsqwu8lmjcalepgp5k6d4j0mtxwww68v9m6qz0q8ah","timestamp":1757472675162}]
+[{"height":18977278, "tx_index":1, "from":"ckt1qzda0cr08m85hc8jlnfp3zer7xulejywt49kt2rr0vthywaa50xwsqwu8lmjcalepgp5k6d4j0mtxwww68v9m6qz0q8ah"}]
 ```

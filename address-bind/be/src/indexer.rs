@@ -21,9 +21,13 @@ async fn query_by_from(
     State(state): State<Indexer>,
     Path(from): Path<String>,
 ) -> Result<impl IntoResponse, AppError> {
-    let rows: Vec<(String, i64)> = query_as(&format!(
-        "SELECT to_addr, timestamp FROM bind_info WHERE from_addr = '{from}'"
-    ))
+    let rows: Vec<(String, i64, i32)> = query_as(
+        "SELECT to_addr, height, tx_index
+         FROM bind_info
+         WHERE from_addr = $1
+         ORDER BY height DESC, tx_index DESC",
+    )
+    .bind(&from)
     .fetch_all(&state.db)
     .await
     .map_err(|e| eyre!("exec sql failed: {e}"))?;
@@ -32,7 +36,8 @@ async fn query_by_from(
         .map(|row| {
             serde_json::json!({
                 "to": row.0,
-                "timestamp": row.1
+                "height": row.1,
+                "tx_index": row.2
             })
         })
         .collect();
@@ -44,19 +49,15 @@ async fn query_by_to(
     State(state): State<Indexer>,
     Path(to): Path<String>,
 ) -> Result<impl IntoResponse, AppError> {
-    let rows: Vec<(String, i64)> = query_as(&format!(
-        "WITH latest_binds AS (
-                SELECT from_addr, MAX(timestamp) as max_timestamp
-                FROM bind_info
-                GROUP BY from_addr
-            )
-            SELECT b.from_addr, b.timestamp
-            FROM bind_info b
-            INNER JOIN latest_binds l
-                ON b.from_addr = l.from_addr
-                AND b.timestamp = l.max_timestamp
-            WHERE b.to_addr = '{to}'"
-    ))
+    // Select for each from_addr the row with max height, and within that height the max tx_index
+    // Use DISTINCT ON to ensure we only return the latest record per from_addr
+    let rows: Vec<(String, i64, i32)> = query_as(
+        "SELECT DISTINCT ON (from_addr) from_addr, height, tx_index
+         FROM bind_info
+         WHERE to_addr = $1
+         ORDER BY from_addr, height DESC, tx_index DESC",
+    )
+    .bind(&to)
     .fetch_all(&state.db)
     .await
     .map_err(|e| eyre!("exec sql failed: {e}"))?;
@@ -65,7 +66,8 @@ async fn query_by_to(
         .map(|row| {
             serde_json::json!({
                 "from": row.0,
-                "timestamp": row.1
+                "height": row.1,
+                "tx_index": row.2
             })
         })
         .collect();
@@ -89,7 +91,7 @@ pub async fn server(
     db.execute("CREATE TABLE IF NOT EXISTS sync_status (height BIGINT PRIMARY KEY)")
         .await?;
     db.execute(
-        "CREATE TABLE IF NOT EXISTS bind_info (from_addr TEXT, to_addr TEXT, timestamp BIGINT, UNIQUE(from_addr, to_addr, timestamp))",
+        "CREATE TABLE IF NOT EXISTS bind_info (from_addr TEXT, to_addr TEXT, timestamp BIGINT, height BIGINT, tx_index INTEGER, UNIQUE(from_addr, to_addr, timestamp))",
     ).await?;
 
     // get last sync height
@@ -151,9 +153,16 @@ pub async fn server(
                     Ok((from, to, timestamp)) => {
                         info!("from: {from}, to: {to}, timestamp: {timestamp}");
                         // insert bind info to db
-                        if let Err(e) = db.execute(query(
-                            &format!("INSERT INTO bind_info (from_addr, to_addr, timestamp) VALUES ('{from}', '{to}', '{timestamp}')")
-                        ))
+                        if let Err(e) = db
+                            .execute(query(
+                                "INSERT INTO bind_info (from_addr, to_addr, timestamp, height, tx_index)
+                                 VALUES ($1, $2, $3, $4, $5)"
+                            )
+                            .bind(&from)
+                            .bind(&to)
+                            .bind(&(timestamp as i64))
+                            .bind(&(current_height as i64))
+                            .bind(&(index as i32)))
                         .await {
                             error!("Failed to insert bind info: {e}");
                         }
@@ -170,9 +179,10 @@ pub async fn server(
             // not too frequently
             if current_height.is_multiple_of(100)
                 && let Err(e) = db
-                    .execute(query(&format!(
-                        "INSERT INTO sync_status (height) VALUES ('{current_height}') ON CONFLICT (height) DO NOTHING;"
-                    )))
+                    .execute(query(
+                        "INSERT INTO sync_status (height) VALUES ($1) ON CONFLICT (height) DO NOTHING;"
+                    )
+                    .bind(&(current_height as i64)))
                     .await
             {
                 error!("Failed to update sync status: {e}");
@@ -211,4 +221,123 @@ async fn test_one() -> Result<()> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sqlx::{Pool, Postgres};
+
+    async fn get_test_db() -> Option<Pool<Postgres>> {
+        let db_url = std::env::var("TEST_DB_URL")
+            .or_else(|_| std::env::var("DB_URL"))
+            .ok()?;
+        PgPoolOptions::new()
+            .max_connections(5)
+            .connect(&db_url)
+            .await
+            .ok()
+    }
+
+    fn test_schema(suffix: &str) -> String {
+        format!("abtest_{}_{}", std::process::id(), suffix)
+    }
+
+    async fn setup_schema(db: &Pool<Postgres>, s: &str) -> Result<()> {
+        sqlx::query(&format!("CREATE SCHEMA IF NOT EXISTS {s}"))
+            .execute(db)
+            .await?;
+        sqlx::query(&format!(
+            "CREATE TABLE IF NOT EXISTS {s}.sync_status (height BIGINT PRIMARY KEY)"
+        ))
+        .execute(db)
+        .await?;
+        sqlx::query(&format!("CREATE TABLE IF NOT EXISTS {s}.bind_info (from_addr TEXT, to_addr TEXT, timestamp BIGINT, height BIGINT, tx_index INTEGER, UNIQUE(from_addr, to_addr, timestamp))")).execute(db).await?;
+        sqlx::query(&format!("TRUNCATE TABLE {s}.bind_info RESTART IDENTITY"))
+            .execute(db)
+            .await?;
+        sqlx::query(&format!("TRUNCATE TABLE {s}.sync_status RESTART IDENTITY"))
+            .execute(db)
+            .await?;
+        Ok(())
+    }
+
+    async fn seed_data(db: &Pool<Postgres>, s: &str) -> Result<()> {
+        // F1 -> T1 with multiple heights and tx_index
+        db.execute(query(&format!("INSERT INTO {s}.bind_info (from_addr, to_addr, timestamp, height, tx_index) VALUES ($1, $2, $3, $4, $5)"))
+            .bind("F1").bind("T1").bind(0_i64).bind(101_i64).bind(3_i32)).await?;
+        db.execute(query(&format!("INSERT INTO {s}.bind_info (from_addr, to_addr, timestamp, height, tx_index) VALUES ($1, $2, $3, $4, $5)"))
+            .bind("F1").bind("T1").bind(1_i64).bind(103_i64).bind(1_i32)).await?;
+        db.execute(query(&format!("INSERT INTO {s}.bind_info (from_addr, to_addr, timestamp, height, tx_index) VALUES ($1, $2, $3, $4, $5)"))
+            .bind("F1").bind("T1").bind(2_i64).bind(103_i64).bind(5_i32)).await?; // latest by height then tx_index
+        db.execute(query(&format!("INSERT INTO {s}.bind_info (from_addr, to_addr, timestamp, height, tx_index) VALUES ($1, $2, $3, $4, $5)"))
+            .bind("F1").bind("T1").bind(3_i64).bind(102_i64).bind(9_i32)).await?;
+
+        // F2 -> T1
+        db.execute(query(&format!("INSERT INTO {s}.bind_info (from_addr, to_addr, timestamp, height, tx_index) VALUES ($1, $2, $3, $4, $5)"))
+            .bind("F2").bind("T1").bind(4_i64).bind(88_i64).bind(7_i32)).await?;
+        db.execute(query(&format!("INSERT INTO {s}.bind_info (from_addr, to_addr, timestamp, height, tx_index) VALUES ($1, $2, $3, $4, $5)"))
+            .bind("F2").bind("T1").bind(5_i64).bind(100_i64).bind(2_i32)).await?;
+        db.execute(query(&format!("INSERT INTO {s}.bind_info (from_addr, to_addr, timestamp, height, tx_index) VALUES ($1, $2, $3, $4, $5)"))
+            .bind("F2").bind("T1").bind(6_i64).bind(100_i64).bind(6_i32)).await?; // latest by height then tx_index
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_query_by_to_distinct_on() -> Result<()> {
+        let Some(db) = get_test_db().await else {
+            eprintln!("Skipped test_query_by_to_distinct_on: TEST_DB_URL/DB_URL not set");
+            return Ok(());
+        };
+        let s = test_schema("to");
+        setup_schema(&db, &s).await?;
+        seed_data(&db, &s).await?;
+
+        let sql = format!(
+            "SELECT DISTINCT ON (from_addr) from_addr, height, tx_index
+                           FROM {s}.bind_info
+                           WHERE to_addr = $1
+                           ORDER BY from_addr, height DESC, tx_index DESC"
+        );
+        let rows: Vec<(String, i64, i32)> = query_as(&sql).bind("T1").fetch_all(&db).await?;
+
+        // Expect F1->height 103, tx_index=5, F2->height 100, tx_index=6
+        let mut map = std::collections::HashMap::new();
+        for (from, height, tx_index) in rows {
+            map.insert(from, (height, tx_index));
+        }
+        assert_eq!(map.get("F1"), Some(&(103_i64, 5_i32)));
+        assert_eq!(map.get("F2"), Some(&(100_i64, 6_i32)));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_query_by_from_ordering() -> Result<()> {
+        let Some(db) = get_test_db().await else {
+            eprintln!("Skipped test_query_by_from_ordering: TEST_DB_URL/DB_URL not set");
+            return Ok(());
+        };
+        let s = test_schema("from");
+        setup_schema(&db, &s).await?;
+        seed_data(&db, &s).await?;
+
+        let sql = format!(
+            "SELECT to_addr, height, tx_index
+                           FROM {s}.bind_info
+                           WHERE from_addr = $1
+                           ORDER BY height DESC, tx_index DESC"
+        );
+        let rows: Vec<(String, i64, i32)> = query_as(&sql).bind("F1").fetch_all(&db).await?;
+
+        println!("{:?}", rows);
+
+        // First row should be height=103, tx_index=5
+        assert!(!rows.is_empty());
+        let (to, height, tx_index) = &rows[0];
+        assert_eq!(to, "T1");
+        assert_eq!(*height, 103_i64);
+        assert_eq!(*tx_index, 5_i32);
+        Ok(())
+    }
 }
