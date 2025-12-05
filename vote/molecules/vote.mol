@@ -16,6 +16,6 @@ table VoteMeta {
 }
 
 table VoteProof {
-    lock_script_hash: Bytes,
+    lock_script_hash: Byte32,
     smt_proof: Bytes,
 }

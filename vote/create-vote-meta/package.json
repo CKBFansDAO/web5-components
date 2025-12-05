@@ -8,12 +8,12 @@
     "start": "ts-node src/index.ts"
   },
   "dependencies": {
-    "@ckb-ccc/ccc": "^1.1.20",
-    "@ckb-ccc/core": "^1.12.1"
+    "@ckb-ccc/ccc": "^1.1.21",
+    "@ckb-ccc/core": "^1.12.2"
   },
   "devDependencies": {
-    "typescript": "^5.9.2",
+    "typescript": "^5.9.3",
     "ts-node": "^10.9.2",
-    "@types/node": "^24.3.1"
+    "@types/node": "^24.10.1"
   }
 }
